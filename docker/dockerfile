@@ -1,0 +1,71 @@
+# Use an Ubuntu base image or any Debian-based distro you prefer
+FROM ubuntu:22.04
+
+# Set non-interactive frontend for apt
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install required packages
+RUN apt-get update && apt-get install -y \
+    openjdk-11-jdk \
+    unzip \
+    adb \
+    curl \
+    wget \
+    git \
+    python3 \
+    python3-pip \
+    x11vnc \
+    xvfb \
+    net-tools \
+    socat \
+    supervisor \
+    libgl1-mesa-dev \
+    libpulse0 \
+    libdbus-1-3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install noVNC and websockify
+RUN git clone https://github.com/novnc/noVNC.git /opt/novnc && \
+    git clone https://github.com/novnc/websockify /opt/novnc/utils/websockify && \
+    ln -s /opt/novnc/vnc.html /opt/novnc/index.html
+
+# Install Android SDK Command Line Tools
+ENV ANDROID_SDK_ROOT=/opt/android-sdk
+RUN mkdir -p ${ANDROID_SDK_ROOT}/cmdline-tools
+
+RUN curl -o commandlinetools-linux.zip https://dl.google.com/android/repository/commandlinetools-linux-8512546_latest.zip && \
+    unzip commandlinetools-linux.zip -d ${ANDROID_SDK_ROOT}/cmdline-tools && \
+    rm commandlinetools-linux.zip
+
+# Add cmdline-tools to PATH
+ENV PATH=${ANDROID_SDK_ROOT}/cmdline-tools/cmdline-tools/bin:${ANDROID_SDK_ROOT}/platform-tools:${PATH}
+
+# Accept licenses and install platform tools, system images and emulator
+RUN mkdir -p ~/.android && echo "### User Config for Licenses ###" > ~/.android/repositories.cfg
+
+# Accept licenses and install packages
+RUN yes | sdkmanager --sdk_root=${ANDROID_SDK_ROOT} --licenses && \
+    sdkmanager --sdk_root=${ANDROID_SDK_ROOT} \
+        "emulator" \
+        "platform-tools" \
+        "platforms;android-30" \
+        "system-images;android-30;google_apis;x86_64"
+
+# Create AVD (Android Virtual Device)
+RUN echo "no" | avdmanager create avd \
+    --name "android30" \
+    --package "system-images;android-30;google_apis;x86_64" \
+    --device "pixel"
+
+# Copy start script
+COPY start-emulator.sh /opt/start-emulator.sh
+RUN chmod +x /opt/start-emulator.sh
+
+# Expose ports: 5554 and 5555 for adb, 5900 for VNC, 6080 for noVNC
+EXPOSE 5554 5555 5900 6080
+
+# Set DISPLAY environment variable globally for emulator etc.
+ENV DISPLAY=:0
+
+# Start the emulator and services when container runs
+CMD ["/opt/start-emulator.sh"]

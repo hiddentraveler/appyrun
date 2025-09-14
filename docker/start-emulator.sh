@@ -1,0 +1,66 @@
+#!/bin/bash
+set -e
+ echo "Starting start-emulator.sh"
+DISPLAY_NUM=:0
+XVFB_RESOLUTION=480x800x24   # Match emulator resolution here
+VNC_PORT=5900
+NOVNC_PORT=6080
+EMULATOR_NAME=android30     # Your AVD name
+EMULATOR_OPTS="-no-audio -no-boot-anim -no-snapshot -gpu swiftshader_indirect -scale max -port 5555"
+
+ADB_PATH=$(which adb)
+NOVNC_DIR="/opt/novnc"
+NOVNC_SCRIPT="$NOVNC_DIR/utils/novnc_proxy"
+X11VNC_ARGS="-display $DISPLAY_NUM -clip 360x640+100+100 -nopw -forever -shared -noxdamage"
+
+echo "Starting Xvfb on display $DISPLAY_NUM with resolution $XVFB_RESOLUTION..."
+Xvfb $DISPLAY_NUM -screen 0 $XVFB_RESOLUTION &
+XVFB_PID=$!
+
+export DISPLAY=$DISPLAY_NUM
+export PATH=$ANDROID_SDK_ROOT/emulator:$PATH
+
+adb kill-server
+adb -a -P 5037 start-server
+
+sleep 2
+
+echo "Launching Android emulator $EMULATOR_NAME..."
+emulator -avd $EMULATOR_NAME $EMULATOR_OPTS &
+EMULATOR_PID=$!
+
+# Wait for emulator to fully boot
+echo "Waiting for emulator to boot completely..."
+BOOT_COMPLETE=0
+while [ $BOOT_COMPLETE -eq 0 ]; do
+  sleep 5
+  BOOT_COMPLETED=$($ADB_PATH shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+  if [ "$BOOT_COMPLETED" = "1" ]; then
+    BOOT_COMPLETE=1
+  else
+    echo "Emulator still booting..."
+  fi
+done
+echo "Emulator booted successfully."
+
+echo "Starting x11vnc server on display $DISPLAY_NUM port $VNC_PORT..."
+x11vnc $X11VNC_ARGS -rfbport $VNC_PORT &
+
+# Check if noVNC directory exists; if not, clone it
+if [ ! -d "$NOVNC_DIR" ]; then
+  echo "Cloning noVNC to $NOVNC_DIR..."
+  git clone https://github.com/novnc/noVNC.git $NOVNC_DIR
+fi
+if [ ! -f "$NOVNC_SCRIPT" ]; then
+  echo "noVNC proxy script not found at $NOVNC_SCRIPT, exiting."
+  exit 1
+fi
+
+echo "Starting noVNC proxy on port $NOVNC_PORT..."
+$NOVNC_SCRIPT --vnc localhost:$VNC_PORT --listen $NOVNC_PORT &
+
+echo "Android emulator environment ready."
+echo "Access noVNC at: http://localhost:$NOVNC_PORT"
+
+# Wait for emulator process to exit to keep container alive
+wait $EMULATOR_PID

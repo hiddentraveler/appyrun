@@ -1,14 +1,15 @@
 package server
 
 import (
-	"net/http"
-
+	"appyrun/internal/handlers"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"net/http"
 )
 
 func (s *Server) RegisterRoutes() http.Handler {
 	e := echo.New()
+	h := *handlers.NewHandlers(s)
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
@@ -20,21 +21,22 @@ func (s *Server) RegisterRoutes() http.Handler {
 		MaxAge:           300,
 	}))
 
-	e.GET("/", s.HelloWorldHandler)
+	//clerkKey := os.Getenv("CLERK_SECRET_KEY")
+	//config := &clerk.ClientConfig{}
+	//config.Key = &clerkKey
+	//if clerkKey == "" {
+	//	log.Fatal("CLERK_SECRET_KEY not set")
+	//}
+	//
+	//client := user.NewClient(config)
+	e.GET("/", h.HomeHandler)
 
-	e.GET("/health", s.healthHandler)
+	e.GET("/health", h.HealthHandler)
+	//fileServer := http.FileServer(http.Dir("static"))
+	//e.GET("/static/", http.StripPrefix("/static/", fileServer))
+	e.Static("/static", "static")
+
+	e.GET("/login", h.LoginHandler)
 
 	return e
-}
-
-func (s *Server) HelloWorldHandler(c echo.Context) error {
-	resp := map[string]string{
-		"message": "Hello World",
-	}
-
-	return c.JSON(http.StatusOK, resp)
-}
-
-func (s *Server) healthHandler(c echo.Context) error {
-	return c.JSON(http.StatusOK, s.db.Health())
 }
