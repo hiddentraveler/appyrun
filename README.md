@@ -1,6 +1,6 @@
 # Project appyrun
 
-One Paragraph of project description goes here
+A convenient way to test android apps over the web.
 
 ## Getting Started
 
